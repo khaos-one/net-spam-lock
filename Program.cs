@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Text;
 using NetFwTypeLib;
 
 namespace NetSpamLock
@@ -17,7 +16,7 @@ namespace NetSpamLock
         /// </summary>
         public class GeoInfo
         {
-            public string IP;
+            public string Ip;
             public string CountryName;
             public string RegionName;
             public string City;
@@ -27,7 +26,7 @@ namespace NetSpamLock
         /// Program entry point.
         /// </summary>
         /// <param name="args"></param>
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             var doSilent = false;
             var doList = false;
@@ -38,18 +37,16 @@ namespace NetSpamLock
                 {
                     case "-s":
                         doSilent = true;
-                        doList = false;
                         break;
 
                     case "-l":
                         doList = true;
-                        doSilent = false;
                         break;
 
                     case "-h":
                     case "-help":
-                        Console.WriteLine("Khaos NetSpamLock v0.1\n");
-                        Console.WriteLine("Usage: netspamlock [-s | -l ]");
+                        Console.WriteLine("Khaos NetSpamLock v2.0\n");
+                        Console.WriteLine("Usage: netspamlock [-s | -l]");
                         Console.WriteLine("\t-s\tSilently scan and block malicious connections.");
                         Console.WriteLine("\t-l\tList all current connections sorted by connection number.");
                         Environment.Exit(0);
@@ -67,8 +64,8 @@ namespace NetSpamLock
 
                 // Log blocked addresses
                 File.AppendAllLines("Blocked.log",
-                                    maliciousIPs.Select(
-                                        x => String.Format("{0}\t{1}", DateTime.Now, x)));
+                    maliciousIPs.Select(
+                        x => String.Format("{0}\t{1}", DateTime.Now, x)));
 
                 // Block malicious IPs
                 BlockAddresses(maliciousIPs);
@@ -86,9 +83,7 @@ namespace NetSpamLock
                 // No options specified -- enter interactive mode
                 Console.WriteLine("NetSpamLock Interactive Shell\n");
 
-                var exit = false;
-
-                while (!exit)
+                while (true)
                 {
                     Console.Write("netspamlock> ");
                     var query = Console.ReadLine();
@@ -107,6 +102,26 @@ namespace NetSpamLock
                             Console.WriteLine("List of active connections by number:");
                             ips.ForEach(x => Console.WriteLine("{0}\t{1}", x.Value, x.Key));
                             Console.WriteLine();
+                            break;
+
+                        case "isin":
+                            throw new NotImplementedException();
+                            break;
+
+                        case "unblock":
+                            throw new NotImplementedException();
+                            break;
+                            
+                        case "block":
+                            throw new NotImplementedException();
+                            break;
+
+                        case "geo":
+                            throw new NotImplementedException();
+                            break;
+
+                        case "geoblocked":
+                            throw new NotImplementedException();
                             break;
 
                         case "help":
@@ -142,11 +157,11 @@ namespace NetSpamLock
         /// <returns>GEO-IP information.</returns>
         public static GeoInfo GetGeo(IPAddress address)
         {
-            string[] content = null;
+            string[] content;
 
             using (var webClient = new WebClient())
             {
-                webClient.Headers.Add("User-Agent: NetSpamLock/0.1");
+                webClient.Headers.Add("User-Agent: NetSpamLock/2.0");
                 content = webClient.DownloadString(String.Format("http://freegeoip.net/csv/{0}", address)).Split(',');
             }
 
@@ -157,7 +172,7 @@ namespace NetSpamLock
 
             return new GeoInfo
             {
-                IP = content[0],
+                Ip = content[0],
                 CountryName = content[2],
                 RegionName = content[4],
                 City = content[5]
@@ -188,7 +203,10 @@ namespace NetSpamLock
             var ips = new Dictionary<IPAddress, uint>();
 
             // And filter gathered metrics
-            foreach (var connection in tcpConnections.Where(connection => !selfIps.Any(selfIp => connection.RemoteEndPoint.Address.Equals(selfIp))))
+            foreach (
+                var connection in
+                    tcpConnections.Where(
+                        connection => !selfIps.Any(selfIp => connection.RemoteEndPoint.Address.Equals(selfIp))))
             {
                 if (!ips.ContainsKey(connection.RemoteEndPoint.Address))
                 {
@@ -213,13 +231,14 @@ namespace NetSpamLock
             }
 
             var firewallPolicy =
-                (INetFwPolicy2)Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2"));
+                (INetFwPolicy2) Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2"));
             var addressesStrings = new HashSet<string>(addresses.Select(x => x.ToString()));
+            var firewallRuleName = ConfigurationManager.AppSettings["FirewallRuleName"];
 
             try
             {
                 // Find existing rule and modify it
-                var firewallRule = firewallPolicy.Rules.Item("NetSpamLock Bans");
+                var firewallRule = firewallPolicy.Rules.Item(firewallRuleName);
 
                 // Accumulate all prevoius rules in hashset
                 foreach (var address in firewallRule.RemoteAddresses.Split(','))
@@ -239,8 +258,8 @@ namespace NetSpamLock
             catch (FileNotFoundException)
             {
                 // Create a rule if it does not exists
-                var firewallRule = (INetFwRule)Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwRule"));
-                firewallRule.Name = "NetSpamLock Bans";
+                var firewallRule = (INetFwRule) Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwRule"));
+                firewallRule.Name = firewallRuleName;
                 firewallRule.Description = "Rule added by NetSpamLock to ban malicious IPs.";
                 firewallRule.Action = NET_FW_ACTION_.NET_FW_ACTION_BLOCK;
                 firewallRule.Direction = NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_IN;
